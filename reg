@@ -1,0 +1,354 @@
+*Encuesta Nacional Sobre Uso de Tiempo (ENUT) 2024
+
+clear all
+set more off
+set type double
+
+*Se descargan las bases de https://www.inegi.org.mx/programas/enut/2024/#microdatos
+
+*Directorios:
+gl Bases = "E:\ENUT\2024\Bases"
+gl BasesNuevas = "E:\ENUT\2024\BasesNuevas"
+gl Dofile = "E:\ENUT\2024"
+
+*PASO 0:CONVERTIR BASE SDEM
+*Activar cuando se quiere convertir la base a dta la primera vez:
+local act=0
+*Se usa TSDEM que contiene las variables de uso de tiempo así como sociodemográficas de las personas
+if `act'==1 {
+import delimited "$Bases\TSDEM.csv"
+*Convertir a minúsculas los nombres de las variables:
+rename _all, lower
+save "$Bases\TSDEM.dta", replace
+}
+
+*PASO 1: Se necesita primero correr la base de la ENUT (modulo) para obtener las variables 
+*de interes para la regresión
+*Activar = 1 si aun no se ha corrido el do:
+local act=0
+if `act'==1 {
+include "$Dofiles\enut2024_versionfinaldo.do"
+}
+
+*PASO 2: Regresion
+*Base del paso previo:
+use "$BasesNuevas\enut_grandesgrupos_2024.dta", clear 
+
+rename llavemod llavesde 
+*Merge con base sociodemográfica; conservo a infancias menores de 12
+merge 1:1 llaveviv llavehog llavesde using "$Bases\TSDEM.dta"
+tab _merge
+drop _merge 
+
+*Dummies de rangos de horas:
+*Población ocupada por rangos de horas 
+gen jornada=.
+replace jornada=1 if tpemh<=40
+replace jornada=2 if (tpemh>=41 & tpemh<=48)
+replace jornada=3 if tpemh>=49
+label define jornada 1 "<=40" 2 "41–48" 3 "49+"
+
+*Posición en la ocupación: 
+gen pos_ocu=.
+replace pos_ocu=1 if p5_5>=1 & p5_5<=3
+replace pos_ocu=2 if p5_5==4
+replace pos_ocu=3 if p5_5==5
+replace pos_ocu=4 if p5_5==6
+label define pos_ocu 1 "remunerada" 2 "empleadora" 3 "cuentap" 4 "sinpago" 
+
+*Nivel de escolaridad:
+gen niv_esc=.
+replace niv_esc=1 if (niv==2 & (gra>=1 & gra<=5)) | (niv==2 & gra<6) | (niv==0 & gra==0) | (niv==1 & gra<=3)
+replace niv_esc=2 if (niv==2 & gra==6) | (niv==3 & gra<3)
+replace niv_esc=3 if (niv==3 & gra==3) | (niv==4 & gra<3) | (niv==5 & gra<3) | (niv==6 & gra<3) 
+replace niv_esc=4 if (niv==4 & (gra==3 | gra==4)) | (niv==5 & (gra==3 | gra==4)) | (niv==6 & (gra==3 | gra==4)) | (niv==7) 
+replace niv_esc=5 if niv==8 | niv==9 | niv==10 | niv==11
+*Se pierde una observacion que no especificó (=99)
+label define niv_esc 1 "Primaria incompleta" 2 "Primaria completa" 3 "Secundaria" 4 "Preparatoria" 5 "Universidad o mas"
+
+*Grupo de edad:
+gen edad2=edad*edad
+
+gen gpo_edad=.
+replace gpo_edad=1 if edad>=15 & edad<=24
+replace gpo_edad=2 if edad>=25 & edad<=34
+replace gpo_edad=3 if edad>=35 & edad<=44
+replace gpo_edad=4 if edad>=45 & edad<=54
+replace gpo_edad=5 if edad>=55
+label define gpo_edad 1 "15 a 24" 2 "25 a 34" 3 "35 a 44" 4 "45 a 54" 5 "55 o más"
+*Para le modelo es mejor usar edad para no categorizar en grandes gpos de edad*edad
+*y perder información
+
+*Estado civil:
+gen edo_civ=.
+replace edo_civ=1 if p4_5==5|p4_5==1
+replace edo_civ=2 if p4_5==3|p4_5==2
+replace edo_civ=3 if p4_5==6
+replace edo_civ=4 if p4_5==4
+label define edo_civ 1 "casada" 2 "divorciada" 3 "soltera" 4 "viuda" 
+
+*Rural:
+gen rural = cond(tloc==4,1,0)
+label var rural "Rural"
+*Urbano:
+gen urbano = cond(tloc<=3,1,0)
+label var urbano "Urbano"
+
+*Integrantes del hogar:
+gen contar=1
+bys llaveviv llavehog: egen tothog=total(contar)
+label var tothog "Total de integrantes hogar"
+
+*Infancias de 0 a 5 en el hogar:
+gen inf0a5=1 if edad<=5
+bys llaveviv llavehog: egen tot0a5=total(inf0a5) 
+label var inf0a5 "Total infancias de 0 a 5 hogar"
+
+*Infancias de 6 a 12 en el hogar:
+gen inf6a12=1 if edad>=6 & edad<=12
+bys llaveviv llavehog: egen tot6a12=total(inf6a12) 
+label var tot6a12 "Total infancias de 6 a 12 hogar"
+
+*Población adulta de 60 y mas en el hogar:
+gen pob60=1 if edad>=60
+bys llaveviv llavehog: egen tot60=total(pob60) 
+label var tot60 "Total de pob 60 y mas"
+
+*Mujeres de 60 y mas en el hogar:
+*Variable considerada por la ayuda en cuidados y trabajo doméstico
+gen pob60m=1 if edad>=60 & mujer==1
+bys llaveviv llavehog: egen tot60m=total(pob60m) 
+label var tot60m "Mujeres de 60 y mas"
+
+*Quedarnos con la población de 15 y más:
+keep if edad>=15
+
+*Se hara regresión lineal por cada gran grupo de actividad de la ENUT
+
+*Usar svyset para especificar el diseño muestral completo
+*Ayuda con errores estándar
+svyset upm_dis [pw=factor], strata(est_dis) vce(linearized) singleunit(centered)
+
+**********************************
+* Con horas laboradas (continua) *
+**********************************
+*Resultados principales con este modelo
+
+preserve 
+keep if tpem==1 & tpemh>0
+*Es población ocupada y tiene horas positivas de trabajo remunerado 
+*tpemh son las horas de trabajo remunerado 
+*"Por cada hora adicional de trabajo remunerado, ¿cuánto cambia el uso del tiempo?"
+
+label var tdnh    "Trabajo doméstico"
+label var tdnrihh "Cuidados"
+label var tnohvh  "Otros hogares"
+label var actenth "Recreación"
+label var actcph  "Autocuidado"
+label var actesh  "Estudio"
+
+
+local actividades "tdnh tdnrihh tnohvh actenth actcph actesh"
+local i = 1
+
+foreach var of local actividades {
+	local name : variable label `var'
+    svy: reg `var' c.tpemh##i.mujer i.pos_ocu ib5.niv_esc edad edad2 i.edo_civ rural tothog c.tot0a5##i.mujer c.tot6a12##i.mujer c.tot60##i.mujer c.tot60m##i.mujer
+    
+    if `i' == 1 {
+        outreg2 using "$BasesNuevas\resultados_hrs.txt", replace excel ///
+        keep(c.tpemh##i.mujer c.tot0a5##i.mujer c.tot6a12##i.mujer c.tot60##i.mujer c.tot60m##i.mujer)  ///
+		ctitle("`name'") addtext(Modelo, "Horas trabajadas")
+    }
+    else {
+        outreg2 using "$BasesNuevas\resultados_hrs.txt", append excel ///
+        keep(c.tpemh##i.mujer c.tot0a5##i.mujer c.tot6a12##i.mujer c.tot60##i.mujer c.tot60m##i.mujer)  ///
+		ctitle("`name'") addtext(Modelo, "Horas trabajadas")
+    }
+
+*Margins:
+margins mujer, dydx(tot0a5 tot6a12 tot60)
+outreg2 using "$BasesNuevas\margins_hrs.xls", append excel ctitle("`name' - hrs")
+
+local leg legend(off)
+*Gráfica:
+margins i.mujer, at(tpemh=(0(5)80))
+marginsplot, recast(line) title("`name'", size(small)) ytitle("Horas", size(small) margin(medium)) xtitle("Horas remuneradas", size(small) margin(medium)) `leg' plotregion(margin(4 4 4 4) color(white)) plot1opts(lcolor("166 128 45") lwidth(medthick) msymbol(O) mcolor("166 128 45")) plot2opts(lcolor("98 19 51")  lwidth(thick) msymbol(S) mcolor("98 19 51")) ylabel(, labsize(small)) xlabel(, labsize(small)) scheme(s1mono) ylabel(#4) xlabel(#4) name(g`i', replace)
+local grafs "`grafs' g`i'"
+
+    local i = `i' + 1
+
+}
+
+/* Gráfica fantasma SOLO para la leyenda
+twoway (scatteri 1 1, msymbol(i) lcolor("166 128 45") lwidth(medthick) connect(l)) (scatteri 1 1, msymbol(i) lcolor("98 19 51") lwidth(medthick) connect(l)), legend(order(1 "Hombres" 2 "Mujeres") cols(2) position(6) ring(0) size(small) region(lc(none) fc(none))) xscale(off) yscale(range(0 0.05)) graphregion(margin(zero) color(white)) plotregion(color(white) margin(zero)) name(legenda, replace)*/
+
+*Combinar panel:
+graph combine `grafs' , col(3) imargin(0 0 0 0) graphregion(margin(2 2 2 2) color(white)) plotregion(color(white)) xsize(16) ysize(10)
+graph export "$BasesNuevas\figura1_panel_tiempo.svg", replace
+
+restore
+
+***************************
+* Con rangos de jornada  *
+***************************
+preserve 
+keep if tpem==1 & tpemh>0
+*Es población ocupada y tiene horas positivas de trabajo remunerado 
+*Este modelo responde a la pregunta: "¿Cómo usan el tiempo quienes tienen 
+*distintos tipos de jornada?"
+
+local actividades "tdnh tdnrihh tnohvh actenth actcph actesh"
+local nombres "domestico cuidados othogar recreacion autocuidado estudio"
+local i = 1
+
+foreach var of local actividades {
+    local name: word `i' of `nombres'
+    svy: reg `var' i.jornada##i.mujer i.pos_ocu ib5.niv_esc edad edad2 i.edo_civ rural tothog c.tot0a5##i.mujer c.tot6a12##i.mujer c.tot60##i.mujer c.tot60m##i.mujer
+    
+    if `i' == 1 {
+        outreg2 using "$BasesNuevas\resultados_jl.txt", replace excel ///
+        keep(2.jornada 3.jornada 2.jornada#1.mujer 3.jornada#1.mujer c.tot0a5##i.mujer c.tot6a12##i.mujer c.tot60##i.mujer c.tot60m##i.mujer) ///
+		ctitle("`name'") addtext(Modelo, "Rango de JL")
+    }
+    else {
+        outreg2 using "$BasesNuevas\resultados_jl.txt", append excel ///
+        keep(2.jornada 3.jornada 2.jornada#1.mujer 3.jornada#1.mujer c.tot0a5##i.mujer c.tot6a12##i.mujer c.tot60##i.mujer c.tot60m##i.mujer)  ///
+		ctitle("`name'") addtext(Modelo, "Rango de JL")
+    }
+	
+*Margins por sexo:
+margins mujer, dydx(jornada)
+outreg2 using "$BasesNuevas\margins_JL.xls", append excel ctitle("`name' - JL")
+	
+    local i = `i' + 1
+}
+
+restore
+
+*************************
+*  Pruebas de robustez  *
+*************************
+*A ambos modelos para ver robustez de los resultados
+*Dado que se usan variables de horas, dado que las distribución entre actcph
+*puede estar muy 
+
+preserve 
+keep if tpem==1 & tpemh>0
+local actividades "tdnh tdnrihh tnohvh actenth actcph actesh"
+local nombres "domestico cuidados othogar recreacion autocuidado estudio"
+local i = 1
+
+foreach var of local actividades {
+    local name: word `i' of `nombres'
+    svy: glm `var' c.tpemh##i.mujer i.pos_ocu ib5.niv_esc edad edad2 i.edo_civ rural tothog tot0a5 tot6a12 tot60 tot60m, family(gamma) link(log)
+
+if `i' == 1 {
+        outreg2 using "$BasesNuevas\resglm_hrs.txt", replace excel ///
+        keep(c.tpemh##i.mujer i.edo_civ rural tothog tot0a5 tot6a12 tot60 tot60m)  ///
+		ctitle("`name'") addtext(Modelo, "GML horas trabajadas")
+    }
+    else {
+        outreg2 using "$BasesNuevas\resglm_hrs.txt", append excel ///
+        keep(c.tpemh##i.mujer i.edo_civ rural tothog tot0a5 tot6a12 tot60 tot60m)  ///
+		ctitle("`name'") addtext(Modelo, "GML horas trabajadas")
+    }
+	
+*Margins por sexo:
+margins mujer, dydx(tpemh)
+outreg2 using "$BasesNuevas\margins_gmlg_hrs.xls", append excel ctitle("`name' - GML")
+	
+    local i = `i' + 1
+}
+
+restore
+
+preserve 
+keep if tpem==1 & tpemh>0
+local actividades "tdnh tdnrihh tnohvh actenth actcph actesh"
+local nombres "domestico cuidados othogar recreacion autocuidado estudio"
+local i = 1
+
+foreach var of local actividades {
+    local name: word `i' of `nombres'
+    svy: glm `var' i.jornada##i.mujer i.pos_ocu ib5.niv_esc edad edad2 i.edo_civ rural tothog tot0a5 tot6a12 tot60 tot60m, family(gamma) link(log)
+	
+	if `i' == 1 {
+        outreg2 using "$BasesNuevas\resglm_jl.txt", replace excel ///
+        keep(2.jornada 3.jornada 2.jornada#1.mujer 3.jornada#1.mujer i.edo_civ rural tothog tot0a5 tot6a12 tot60 tot60m)  ///
+		ctitle("`name'") addtext(Modelo, "GML rango JL")
+    }
+    else {
+        outreg2 using "$BasesNuevas\resglm_jl.txt", append excel ///
+       keep(2.jornada 3.jornada 2.jornada#1.mujer 3.jornada#1.mujer i.edo_civ rural tothog tot0a5 tot6a12 tot60 tot60m)  ///
+		ctitle("`name'") addtext(Modelo, "GML rango de JL")
+    }
+	
+*Margins por sexo:
+margins mujer, dydx(jornada)
+outreg2 using "$BasesNuevas\margins_gmlg_JL.xls", append excel ctitle("`name' - GMLJL")
+	
+    local i = `i' + 1
+}
+restore
+
+
+*Poissson
+
+preserve 
+keep if tpem==1 & tpemh>0
+local actividades "tdnh tdnrihh tnohvh actenth actcph actesh"
+local nombres "domestico cuidados othogar recreacion autocuidado estudio"
+local i = 1
+
+foreach var of local actividades {
+    local name: word `i' of `nombres'
+    svy: glm `var' tpemh i.mujer c.tpemh##i.mujer i.pos_ocu ib5.niv_esc edad edad2 i.edo_civ rural tothog tot0a5 tot6a12 tot60 tot60m, family(poisson) link(log)
+
+if `i' == 1 {
+        outreg2 using "$BasesNuevas\respoi_hrs.txt", replace excel ///
+        keep(c.tpemh##i.mujer i.edo_civ rural tothog tot0a5 tot6a12 tot60 tot60m)  ///
+		ctitle("`name'") addtext(Modelo, "Poisson horas trabajadas")
+    }
+    else {
+        outreg2 using "$BasesNuevas\respoi_hrs.txt", append excel ///
+        keep(c.tpemh##i.mujer i.edo_civ rural tothog tot0a5 tot6a12 tot60 tot60m)  ///
+		ctitle("`name'") addtext(Modelo, "Poisson horas trabajadas")
+    }
+
+*Margins por sexo:
+margins mujer, dydx(tpemh)
+outreg2 using "$BasesNuevas\margins_gmlp_hrs.xls", append excel ctitle("`name' - GMLp")
+	
+    local i = `i' + 1
+}
+restore
+
+preserve 
+keep if tpem==1 & tpemh>0
+local actividades "tdnh tdnrihh tnohvh actenth actcph actesh"
+local nombres "domestico cuidados othogar recreacion autocuidado estudio"
+local i = 1
+
+foreach var of local actividades {
+    local name: word `i' of `nombres'
+    svy: glm `var' i.jornada##i.mujer i.pos_ocu ib5.niv_esc edad edad2 i.edo_civ rural tothog tot0a5 tot6a12 tot60 tot60m, family(poisson) link(log)
+	
+	if `i' == 1 {
+        outreg2 using "$BasesNuevas\respoi_jl.txt", replace excel ///
+        keep(2.jornada 3.jornada 2.jornada#1.mujer 3.jornada#1.mujer i.edo_civ rural tothog tot0a5 tot6a12 tot60 tot60m)  ///
+		ctitle("`name'") addtext(Modelo, "Poisson rango JL")
+    }
+    else {
+        outreg2 using "$BasesNuevas\respoi_jl.txt", append excel ///
+        keep(2.jornada 3.jornada 2.jornada#1.mujer 3.jornada#1.mujer i.edo_civ rural tothog tot0a5 tot6a12 tot60 tot60m)  ///
+		ctitle("`name'") addtext(Modelo, "Poisson rango de JL")
+    }
+	
+*Margins por sexo:
+margins mujer, dydx(jornada)
+outreg2 using "$BasesNuevas\margins_gmlp_JL.xls", append excel ctitle("`name' - GMLJLp")
+	
+    local i = `i' + 1
+}
+restore 
