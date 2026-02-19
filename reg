@@ -182,9 +182,6 @@ local grafs "`grafs' g`i'"
 
 }
 
-/* Gráfica fantasma SOLO para la leyenda
-twoway (scatteri 1 1, msymbol(i) lcolor("166 128 45") lwidth(medthick) connect(l)) (scatteri 1 1, msymbol(i) lcolor("98 19 51") lwidth(medthick) connect(l)), legend(order(1 "Hombres" 2 "Mujeres") cols(2) position(6) ring(0) size(small) region(lc(none) fc(none))) xscale(off) yscale(range(0 0.05)) graphregion(margin(zero) color(white)) plotregion(color(white) margin(zero)) name(legenda, replace)*/
-
 *Combinar panel:
 graph combine `grafs' , col(3) imargin(0 0 0 0) graphregion(margin(2 2 2 2) color(white)) plotregion(color(white)) xsize(16) ysize(10)
 graph export "$BasesNuevas\figura1_panel_tiempo.svg", replace
