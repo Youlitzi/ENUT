@@ -1,0 +1,508 @@
+*Comisión Nacional de los Salarios Mínimos (Conasami) 
+*Encuesta Nacional Sobre Uso de Tiempo (ENUT), 2024 del Inistituo Nacional de Estadística y Geografía (INEGI) de México
+*Código para estadísticas descriptivas con la ENUT 2024
+*Se descargan las bases de https://www.inegi.org.mx/programas/enut/2024/#microdatos
+
+clear all
+set more off
+set type double
+
+*Se descargan las bases de https://www.inegi.org.mx/programas/enut/2024/#microdatos
+
+*Directorios:
+gl Bases = "E:\ENUT\2024\Bases"
+gl BasesNuevas = "E:\ENUT\2024\BasesNuevas"
+
+*Activar si se quiere de 12 y más (como INEGI):
+local p12ymas=1
+*Activar si se quiere de 15 y más (personas en edad de trabajar):
+local p15ymas=1
+
+*Activar cuando se quiere convertir la base a dta la primera vez:
+local act=0
+*Se usa TMODULO que contiene las variables de uso de tiempo así como sociodemográficas de las personas
+if `act'==1 {
+import delimited "$Bases\TMODULO.csv"
+*Convertir a minúsculas los nombres de las variables:
+rename _all, lower
+save "$Bases\TMODULO.dta", replace
+}
+
+use "$Bases\TMODULO.dta", clear 
+*Incluye a la pob de 12 y más
+sort llavemod
+rename edad_v edad 
+rename fac_per factor
+*Comprobar que hay id único por persona:
+bys llavemod: gen id=1 if _n==1
+tab id
+drop id
+
+foreach v of varlist p5_* p6_* {
+        replace `v' = 0 if missing(`v')
+    }
+
+*Sexo:
+gen mujer=cond(sexo==2,1,0)
+lab define sexo 0 "Hombre" 1 "Mujer" 
+lab val mujer sexo
+tab mujer [fw=factor]
+* 57,577,224 mujeres y 50,152,286 hombres
+
+*índigena o afro:
+gen habla=cond(p4_1==1,1,0)
+label var habla "Habla lengua indigena"
+tab habla [fw=factor]
+gen afro=cond(p4_4==1,1,0)
+label var afro "Afrodescendiente"
+tab afro [fw=factor]
+
+* Grupos de interes * 
+gen pob_12mas= cond((edad>=12&edad<=98),1,0)
+label var pob_12mas "Población de 12 años y más"
+tab pob_12mas [fw=factor]
+*107,829,510 que es el mismo de pob total
+gen pob_15mas= cond((edad>=15&edad<=98),1,0) 
+label var pob_15mas "Población de 15 años y más"
+tab pob_15mas [fw=factor]
+* 100,829,510 personas 
+
+//////////////////////////////////////////////////////////////////////////////
+////////////////////////// VARIABLES CON NOMBRES INEGI ///////////////////////
+//////////////////////////////////////////////////////////////////////////////
+
+****************************************************************
+*     ACTIVIDADES PARA EL MERCADO Y BIENES DE AUTOCONSUMO     *
+****************************************************************
+
+* TRABAJO PARA EL MERCADO:
+gen tpem=cond((p5_1==1) | (p5_2>=1 & p5_2<=6),1,0)
+tab tpem [fw=factor] // 64,187,159 personas
+gen tpemh = (p5_8_1_1 + p5_8_1_3 + p5_8_2_1 + p5_8_2_3) if tpem==1
+sum tpemh [fw=factor] // 42.66654 = 42.7 horas en promedio 
+
+* BÚSQUEDA DE TRABAJO: 
+gen buscar = cond((p5_1==2) & (p5_11==1 | p5_11==2),1,0)
+tab buscar [fw=factor] // 757,521 personas
+gen busc_m = (((p5_12_1 + p5_12_3)*60) + (p5_12_2 + p5_12_4)) if buscar==1
+gen busc_h = (busc_m/60)
+sum busc_h [fw=factor] // 7.89707 = 7.9 horas en promedio
+
+* TRASLADOS AL TRABAJO:
+gen trtms=(((p5_9_1 + p5_9_3)*60) + (p5_9_2 + p5_9_4)) if tpem==1
+gen trth=(trtms/60) if trtms>0
+gen traslado=cond(trtms>0 & tpem==1,1,0)
+tab traslado [fw=factor] // 59,942,853 personas
+sum trth [fw=factor]   // 5.60542 = 5.6 horas en promedio
+
+* TRABAJO NO REMUNERADO DE PRODUCCIÓN DE AUTOCONSUMO:
+gen recoleccionh=cond(p6_3_1==1 | p6_3_2 == 1 | p6_3_3 == 1 | p6_3_4 == 1 | p6_3_5 == 1 | p6_3_6 == 1 | p6_3_7 == 1 | p6_3_8 == 1 | p6_3_9 == 1,1,0)
+tab recoleccion [fw=factor] // 25,296,445 personas
+gen recms=(((p6_3a_1_1 + p6_3a_1_3 + p6_3a_2_1 + p6_3a_2_3 + p6_3a_3_1 + p6_3a_3_3 + p6_3a_4_1 + p6_3a_4_3 + p6_3a_5_1 + p6_3a_5_3 + p6_3a_6_1 + p6_3a_6_3 + p6_3a_7_1 + p6_3a_7_3 + p6_3a_8_1 + p6_3a_8_3 + p6_3a_9_1 + p6_3a_9_3)*60) + (p6_3a_1_2 + p6_3a_1_4 + p6_3a_2_2 + p6_3a_2_4 + p6_3a_3_2 + p6_3a_3_4 + p6_3a_4_2 + p6_3a_4_4 + p6_3a_5_2 + p6_3a_5_4 + p6_3a_6_2 + p6_3a_6_4 + p6_3a_7_2 + p6_3a_7_4 + p6_3a_8_2 + p6_3a_8_4 + p6_3a_9_2 + p6_3a_9_4)) 
+gen rech=(recms/60) if recoleccionh==1
+sum rech [fw=factor] // 5.381367 = 5.4 horas en promedio 
+
+* ACTIVIDADES PARA EL MERCADO Y BIENES DE AUTOCONSUMO 
+* Contiene todas las anteriores
+gen apyba = cond((tpem==1 | buscar==1 | recoleccionh==1),1,0)
+tab apyba [fw=factor] // 75,731,173 personas
+egen apybah = rowtotal(tpemh busc_h trth rech) if apyba==1
+sum apybah [fw=factor]  // 42.47604 = 42.5 horas promedio
+
+// Para tener estadistica descriptiva:
+
+if `p12ymas'==1 {
+keep if pob_12mas==1
+preserve 
+collapse (sum) pob_12mas habla afro tpem buscar traslado recoleccionh apyba (mean) tpemh busc_h trth rech apybah [fw=factor]
+save "$BasesNuevas\TrabajoRemunerado_2024_nac_12ymas.dta", replace 
+export excel using "$BasesNuevas/Horas2024_12ymas.xlsx", sheet("trem nacional", modify) firstrow(variables)
+restore
+
+preserve
+collapse (sum) pob_12mas habla afro tpem buscar traslado recoleccionh apyba (mean) tpemh busc_h trth rech apybah [fw=factor], by (mujer)
+save "$BasesNuevas\TrabajoRemunerado_2024_sex_12ymas.dta", replace 
+export excel using "$BasesNuevas/Horas2024_12ymas.xlsx", sheet("trem sexo", modify) firstrow(variables)
+restore
+}
+
+if `p15ymas'==1 {
+keep if pob_15mas==1
+preserve 
+collapse (sum) pob_15mas habla afro tpem buscar traslado recoleccionh apyba (mean) tpemh busc_h trth rech apybah [fw=factor]
+save "$BasesNuevas\TrabajoRemunerado_2024_nac_15ymas.dta", replace 
+export excel using "$BasesNuevas/Horas2024_15ymas.xlsx", sheet("trem nacional", modify) firstrow(variables)
+restore
+
+preserve 
+collapse (sum) pob_15mas habla afro tpem buscar traslado recoleccionh apyba (mean) tpemh busc_h trth rech apybah [fw=factor], by (mujer)
+save "$BasesNuevas\TrabajoRemunerado_2024_sex_15ymas.dta", replace 
+export excel using "$BasesNuevas/Horas2024_15ymas.xlsx", sheet("trem sexo", modify) firstrow(variables)
+restore
+}
+
+************************************************************************
+*       TRABAJO NO REMUNERADO DOMÉSTICO DE CUIDADOS Y VOLUNTARIO      *
+************************************************************************
+//////////////////////////////////////////////////////////////////////////////
+//         TRABAJO DOMÉSTICO NO REMUNERADO PARA EL PORPIO HOGAR             //
+//////////////////////////////////////////////////////////////////////////////
+
+* PREPARACIÓN Y SERVICIO DE ALIMENTOS:
+gen alimentos=cond(p6_4_1 == 1 | p6_4_2 == 1 | p6_4_3 == 1 | p6_4_4 == 1 | p6_4_5 == 1,1,0)
+tab alimentos [fw=factor] // 86,265,816 personas
+gen alims=(((p6_4a_1_1 + p6_4a_1_3 + p6_4a_2_1 + p6_4a_2_3 + p6_4a_3_1 + p6_4a_3_3 + p6_4a_4_1 + p6_4a_4_3 + p6_4a_5_1 + p6_4a_5_3)*60) + (p6_4a_1_2 + p6_4a_1_4 + p6_4a_2_2 + p6_4a_2_4 + p6_4a_3_2 + p6_4a_3_4 + p6_4a_4_2 + p6_4a_4_4 + p6_4a_5_2 + p6_4a_5_4))
+gen alih = (alims/60) if alimentos==1
+sum alih [fw=factor] // 9.853044 = 9.9 horas promedio
+
+* LIMPIEZA DE LA VIVIENDA:
+gen limys=cond(p6_5_1 == 1 | p6_5_2 == 1 | p6_5_3 == 1 | p6_5_4 == 1 | p6_5_5 == 1,1,0)
+tab limys [fw=factor] // 95,292,978 personas
+gen liysms=(((p6_5a_1_1 + p6_5a_1_3 + p6_5a_2_1 + p6_5a_2_3 + p6_5a_3_1 + p6_5a_3_3 + p6_5a_4_1 + p6_5a_4_3 + p6_5a_5_1 + p6_5a_5_3)*60) + (p6_5a_1_2 + p6_5a_1_4 + p6_5a_2_2 + p6_5a_2_4 + p6_5a_3_2 + p6_5a_3_4 + p6_5a_4_2 + p6_5a_4_4 + p6_5a_5_2 + p6_5a_5_4)) if limys==1
+gen liysh = (liysms/60) 
+sum liysh [fw=factor] // 7.458482 = 7.5 horas promedio 
+
+* LIMPIEZA Y CUIDADO DE ROPA Y CALZADO:
+gen mantyrp=cond(p6_6_1 == 1 | p6_6_2 == 1 | p6_6_3 == 1 | p6_6_4 == 1 | p6_6_5 == 1 ,1,0)
+tab mantyrp [fw=factor] // 83,980,540 personas 
+gen mtrpms=(((p6_6a_1_1 + p6_6a_1_3 + p6_6a_2_1 + p6_6a_2_3 + p6_6a_3_1 + p6_6a_3_3 + p6_6a_4_1 + p6_6a_4_3 + p6_6a_5_1 + p6_6a_5_3)*60) + (p6_6a_1_2 + p6_6a_1_4 + p6_6a_2_2 + p6_6a_2_4 + p6_6a_3_2 + p6_6a_3_4 + p6_6a_4_2 + p6_6a_4_4 + p6_6a_5_2 + p6_6a_5_4))
+gen mtrph = (mtrpms/60) if mantyrp==1
+sum mtrph [fw=factor] // 3.29382 = 3.3 horas promedio
+
+* MANTENIMIENTO, INSTALACIÓN Y REPARACIONES MENORES DE LA VIVIENDA Y OTROS BIENES DEL HOGAR:
+gen elaboracionh=cond(p6_7_1 == 1 | p6_7_2 == 1 | p6_7_3 == 1 | p6_7_4 == 1,1,0)
+tab elaboracionh [fw=factor] // 22,538,676 personas
+gen elams = (((p6_7a_1_1 + p6_7a_1_3 + p6_7a_2_1 + p6_7a_2_3 + p6_7a_3_1 + p6_7a_3_3 + p6_7a_4_1 + p6_7a_4_3)*60) + (p6_7a_1_2 + p6_7a_1_4 + p6_7a_2_2 + p6_7a_2_4 + p6_7a_3_2 + p6_7a_3_4 + p6_7a_4_2 + p6_7a_4_4))
+gen elah = (elams/60) if elaboracionh==1
+sum elah [fw=factor] // 1.823813 = 1.8 horas promedio
+
+*COMPRAS:
+gen cpt=cond(p6_8_1 == 1 | p6_8_2 == 1 | p6_8_3 == 1,1,0)
+tab cpt [fw=factor] // 66,262,022 personas
+gen cptms=(((p6_8a_1_1 + p6_8a_1_3 + p6_8a_2_1 + p6_8a_2_3 + p6_8a_3_1 + p6_8a_3_3)*60) + (p6_8a_1_2 + p6_8a_1_4 + p6_8a_2_2 + p6_8a_2_4 + p6_8a_3_2 + p6_8a_3_4))
+gen cpth=(cptms/60) if cpt==1
+sum cpth [fw=factor] // 2.453566 = 2.5 horas promedio
+
+*PAGOS Y TRÁMITES:
+gen ptpt=cond(p6_9_1 == 1 | p6_9_2 == 1 | p6_9_3 == 1,1,0)
+tab ptpt [fw=factor] // 36,196,491 personas
+gen pttms=(((p6_9a_1_1 + p6_9a_1_3 + p6_9a_2_1 + p6_9a_2_3 + p6_9a_3_1 + p6_9a_3_3)*60) + (p6_9a_1_2 + p6_9a_1_4 + p6_9a_2_2 + p6_9a_2_4 + p6_9a_3_2 + p6_9a_3_4))
+gen ptth=(pttms/60) if ptpt==1
+sum ptth [fw=factor] // 0.8930593 = 0.9 horas promedio 
+
+*GESTIÓN Y ADMINISTRACIÓN: 
+gen gya=cond(p6_10_1 == 1 | p6_10_2 == 1 | p6_10_3 == 1 | p6_10_4 == 1 | p6_10_5 ==1 | p6_10_6 == 1 | p6_10_7 == 1,1,0)
+tab gya [fw=factor] // 77,100,555 personas 
+gen gyam=(((p6_10a_1_1 + p6_10a_1_3 + p6_10a_2_1 + p6_10a_2_3 + p6_10a_3_1 + p6_10a_3_3 + p6_10a_4_1 + p6_10a_4_3 + p6_10a_5_1 + p6_10a_5_3 + p6_10a_6_1 + p6_10a_6_3 + p6_10a_7_1 + p6_10a_7_3)*60) + (p6_10a_1_2 + p6_10a_1_4 + p6_10a_2_2 + p6_10a_2_4 + p6_10a_3_2 + p6_10a_3_4 + p6_10a_4_2 + p6_10a_4_4 + p6_10a_5_2 + p6_10a_5_4 + p6_10a_6_2 + p6_10a_6_4 + p6_10a_7_2 + p6_10a_7_4))
+gen gyah=(gyam/60) if gya==1
+sum gyah [fw=factor] // 1.0616 = 1.1 horas promedio 
+
+* TRABAJO DOMÉSTICO NO REMUNERADO PARA EL PROPRIO HOGAR 
+* Contiene todas las anteriores
+gen tdnr = cond((alimentos==1 | limys==1 | mantyrp==1 | elaboracionh==1 | cpt==1 | ptpt==1 | gya==1),1,0)
+tab tdnr [fw=factor] // 104,970,492 personas
+egen tdnh = rowtotal(alih liysh mtrph elah cpth ptth gyah) if tdnr==1
+sum tdnh [fw=factor] // 20.53147 = 20.5 horas trabajadas
+
+//////////////////////////////////////////////////////////////////////////////
+//       TRABAJO NO REMUNERADO DE CUIDADO A INTEGRANTES DEL HOGAR           //
+//////////////////////////////////////////////////////////////////////////////
+
+* CUIDADOS ESPECIALES A INTEGRANTES DEL HOGAR CON ENFERMEDAD CRÓNICA, TEMPORAL O DISCAPACIDAD: 
+gen ce_total = cond(p6_11_01 == 1 | p6_11_04 ==1 | p6_11_02 == 1 | p6_11_03 ==1 | p6_11_05 == 1 | p6_11_08 ==1 | p6_11_06 == 1 | p6_11_07 ==1 | p6_11_09 == 1 | p6_11_10 ==1 | p6_11_11 == 1 | p6_11_12 == 1 | p6_11_13 == 1 |p6_11_14 == 1,1,0)
+tab ce_total [fw=factor] // 9,000,493 personas 
+gen ce_totms = (((p6_11a_01_1 + p6_11a_01_3 + p6_11a_04_1 + p6_11a_04_3 + p6_11a_02_1 + p6_11a_02_3 + p6_11a_03_1 + p6_11a_03_3 + p6_11a_05_1 + p6_11a_05_3 + p6_11a_08_1 + p6_11a_08_3 + p6_11a_06_1 + p6_11a_06_3 + p6_11a_07_1 + p6_11a_07_3 + p6_11a_09_1 + p6_11a_09_3 + p6_11a_10_1 + p6_11a_10_3 + p6_11a_11_1 + p6_11a_11_3 + p6_11a_12_1 + p6_11a_12_3 + p6_11a_13_1 + p6_11a_13_3 + p6_11a_14_1 + p6_11a_14_3)*60) + (p6_11a_01_2 + p6_11a_01_4 + p6_11a_04_2 + p6_11a_04_4 + p6_11a_02_2 + p6_11a_02_4 + p6_11a_03_2 + p6_11a_03_4 + p6_11a_05_2 + p6_11a_05_4 + p6_11a_08_2 + p6_11a_08_4 + p6_11a_06_2 + p6_11a_06_4 + p6_11a_07_2 + p6_11a_07_4 + p6_11a_09_2 + p6_11a_09_4 + p6_11a_10_2 + p6_11a_10_4 + p6_11a_11_2 + p6_11a_11_4 + p6_11a_12_2 + p6_11a_12_4 + p6_11a_13_2 + p6_11a_13_4 + p6_11a_14_2 + p6_11a_14_4))
+gen ce_toth = (ce_totms/60) if ce_total==1
+sum ce_toth [fw=factor] // 19.38839 = 19.4 horas en promedio 
+
+* CUIDADO A INTEGRANTES DEL HOGAR DE 0 A 5 AÑOS:
+gen c05_ptot = cond(p6_12_01 == 1 | p6_12_02 == 1 | p6_12_03 == 1 | p6_12_04 == 1 | p6_12_05 == 1 | p6_12_06 == 1 | p6_12_07 == 1 | p6_12_08 == 1 | p6_12_09 == 1 | p6_12_10 ==1 | p6_12_11 == 1 | p6_12_12 == 1,1,0)
+tab c05_ptot [fw=factor] // 18,780,520 personas
+gen c05_totms = (((p6_12a_01_1 + p6_12a_01_3 + p6_12a_02_1 + p6_12a_02_3 + p6_12a_03_1 + p6_12a_03_3 + p6_12a_04_1 + p6_12a_04_3 + p6_12a_05_1 + p6_12a_05_3 + p6_12a_06_1 + p6_12a_06_3 + p6_12a_07_1 + p6_12a_07_3 + p6_12a_08_1 + p6_12a_08_3 + p6_12a_09_1 + p6_12a_09_3 + p6_12a_10_1 + p6_12a_10_3 + p6_12a_11_1 + p6_12a_11_3 + p6_12a_12_1 + p6_12a_12_3)*60) + (p6_12a_01_2 + p6_12a_01_4 + p6_12a_02_2 + p6_12a_02_4 + p6_12a_03_2 + p6_12a_03_4 + p6_12a_04_2 + p6_12a_04_4 + p6_12a_05_2 + p6_12a_05_4 + p6_12a_06_2 + p6_12a_06_4 + p6_12a_07_2 + p6_12a_07_4 + p6_12a_08_2 + p6_12a_08_4 + p6_12a_09_2 + p6_12a_09_4 + p6_12a_10_2 + p6_12a_10_4 + p6_12a_11_2 + p6_12a_11_4 + p6_12a_12_2 + p6_12a_12_4))
+gen c05_total = (c05_totms/60) if c05_ptot==1 
+sum c05_total [fw=factor] // 25.90182 = 25.9 horas en promedio
+
+* CUIDADO A INTEGRANTES DEL HOGAR DE 6 A 14 AÑOS:
+gen c014_ptot = cond(p6_13_1 == 1 | p6_13_2 ==1 | p6_13_3 == 1 | p6_13_4 ==1 | p6_13_5 == 1 | p6_13_6 == 1 | p6_13_7 == 1 | p6_13_8 == 1 | p6_13_9 == 1,1,0)
+tab c014_ptot [fw=factor] // 30,504,897 personas 
+gen c014_totms = (((p6_13a_1_1 + p6_13a_1_3 + p6_13a_2_1 + p6_13a_2_3 + p6_13a_3_1 + p6_13a_3_3 + p6_13a_4_1 + p6_13a_4_3 + p6_13a_5_1 + p6_13a_2_3 + p6_13a_6_1 + p6_13a_6_3 + p6_13a_7_1 + p6_13a_7_3 + p6_13a_8_1 + p6_13a_8_3 + p6_13a_9_1 + p6_13a_9_3)*60) + (p6_13a_1_2 + p6_13a_1_4 + p6_13a_2_2 + p6_13a_2_4 + p6_13a_3_2 + p6_13a_3_4 + p6_13a_4_2 + p6_13a_4_4 + p6_13a_5_2 + p6_13a_5_4 + p6_13a_6_2 + p6_13a_6_4 + p6_13a_7_2 + p6_13a_7_4 + p6_13a_8_2 + p6_13a_8_4 + p6_13a_9_2 + p6_13a_9_4)) if c014_ptot == 1
+gen c014_toth = (c014_totms/60)
+sum c014_toth [fw=factor] // 14.03548 = 14.0 horas en promedio 
+
+* CUIDADO A INTEGRANTES DEL HOGAR DE 15 A 59 AÑOS:
+gen c159_ptot = cond(p6_14_1 == 1 | p6_14_2 == 1 | p6_14_3 ==1 | p6_14_4 == 1 | p6_14_5 ==1 | p6_14_6 == 1,1,0)
+tab c159_ptot [fw=factor] // 45,968,983 personas
+gen c159_totms = (((p6_14a_1_1 + p6_14a_1_3 + p6_14a_2_1 + p6_14a_2_3 + p6_14a_3_1 + p6_14a_3_3 + p6_14a_4_1 + p6_14a_4_3 + p6_14a_5_1 + p6_14a_5_3 + p6_14a_6_1 + p6_14a_6_3)*60) + (p6_14a_1_2 + p6_14a_1_4 + p6_14a_2_2 + p6_14a_2_4 + p6_14a_3_2 + p6_14a_3_4 + p6_14a_4_2 + p6_14a_4_4 + p6_14a_5_2 + p6_14a_5_4 + p6_14a_6_2 + p6_14a_6_4))
+gen c159_toth = (c159_totms/60) if c159_ptot==1
+sum c159_toth [fw=factor] // 4.890091 = 4.9 horas en promedio
+
+* CUIDADO A INTEGRANTES DEL HOGAR DE 60 AÑOS Y MÁS:
+gen c60m_ptot = cond(p6_15_1 == 1 | p6_15_2 == 1 | p6_15_3 ==1 | p6_15_4 == 1 | p6_15_5 ==1 | p6_15_6 == 1 | p6_15_7 == 1,1,0)
+tab c60m_ptot [fw=factor] // 12,644,814 personas
+gen c60m_totms = (((p6_15a_1_1 + p6_15a_1_3 + p6_15a_2_1 + p6_15a_2_3 + p6_15a_3_1 + p6_15a_3_3 + p6_15a_4_1 + p6_15a_4_3 + p6_15a_5_1 + p6_15a_5_3 + p6_15a_6_1 + p6_15a_6_3 + p6_15a_7_1 + p6_15a_7_3)*60) + (p6_15a_1_2 + p6_15a_1_4 + p6_15a_2_2 + p6_15a_2_4 + p6_15a_3_2 + p6_15a_3_4 + p6_15a_4_2 + p6_15a_4_4 + p6_15a_5_2 + p6_15a_5_4 + p6_15a_6_2 + p6_15a_6_4 + p6_15a_7_2 + p6_15a_7_4))
+gen c60m_toth = (c60m_totms/60) if c60m_ptot==1 
+sum c60m_toth [fw=factor] // 8.529339 = 8.5 horas en promedio 
+
+* TRABAJO NO REMUNERADO DE CUIDADO A INTEGRANTES DEL HOGAR 
+* Contiene cuidados a grupos especificos 0 a 5, 6 a 14, 15 a 59, 60 y más, y cuidados especiales)
+gen tdnrih = cond((ce_total==1 |c05_ptot==1 |c014_ptot==1 |c159_ptot==1 |c60m_ptot==1),1,0)
+tab tdnrih [fw=factor] // 75,325,111 personas
+egen tdnrihh = rowtotal(ce_toth c05_total c014_toth c159_toth c60m_toth) if tdnrih==1
+sum tdnrihh [fw=factor] // 18.87485 = 18.9 horas trabajadas
+
+//////////////////////////////////////////////////////////////////////////////
+//  TRABAJO NO REMUNERADO COMO APOYO A OTROS HOGARES Y TRABAJO VOLUNTARIO   //
+//////////////////////////////////////////////////////////////////////////////
+
+*TRABAJO DOMÉSTICO PARA HOGAR FAMILIAR:
+gen trdomt = cond(p6_16_1 == 1 | p6_16_2 == 1,1,0)
+tab trdomt [fw=factor] // 10,770,180 personas
+gen trdomm = (((p6_16a_1_1 + p6_16a_1_3 + p6_16a_2_1 + p6_16a_2_3)*60) + (p6_16a_1_2 + p6_16a_1_4 + p6_16a_2_2 + p6_16a_2_4))
+gen trdomh = (trdomm/60) if trdomt==1
+sum trdomh [fw=factor] // 3.499528 = 3.5 horas en promedio
+
+*CUIDADOS ESPECIALES A PERSONAS DE OTROS HOGARES FAMILIARES CON ENFERMEDAD CRÓNICA, TEMPORAL O DISCAPACIDAD 
+gen coh_cuidadosesp = cond(p6_16_3 == 1,1,0)
+tab coh_cuidadosesp [fw=factor] // 3,005,666 personas
+gen coh_cuidadosesp_m= (((p6_16a_3_1 + p6_16a_3_3)*60) + (p6_16a_3_2 + p6_16a_3_4))
+gen coh_cuidadosesp_h = (coh_cuidadosesp_m/60) if coh_cuidadosesp==1
+sum coh_cuidadosesp_h [fw=factor] // 7.548858 = 7.5 horas en promedio
+
+*CUIDADOS PROPIOS DE LA EDAD A PERSONAS DE OTROS HOGARES FAMILIARES
+gen cuiedtot = cond(p6_16_4 == 1 | p6_16_5 == 1 | p6_16_6 == 1,1,0)
+tab cuiedtot [fw=factor] // 9,399,097 personas 
+gen cuiedpm = (((p6_16a_4_1 + p6_16a_4_3 + p6_16a_5_1 + p6_16a_5_3 + p6_16a_6_1 + p6_16a_6_3)*60) + (p6_16a_4_2 + p6_16a_4_4 + p6_16a_5_2 + p6_16a_5_4 + p6_16a_6_2 + p6_16a_6_4))
+gen cuiedph = (cuiedpm/60) if cuiedtot==1
+sum cuiedph [fw=factor] // 7.725992 = 7.7 horas en promedio
+
+*VOLUNTARIADO Y APOYO A OTROS HOGARES:
+gen volapoy = cond(p6_17_1 == 1 | p6_17_2 == 1 | p6_17_3 == 1,1,0)
+tab volapoy [fw=factor] // 7,345,014 personas
+gen volapoyms = (((p6_17a_1_1 + p6_17a_1_3 + p6_17a_2_1 + p6_17a_2_3 + p6_17a_3_1 + p6_17a_3_3)*60) + (p6_17a_1_2 + p6_17a_1_4 + p6_17a_2_2 + p6_17a_2_4 + p6_17a_3_2 + p6_17a_3_4))
+gen volapoyh = (volapoyms/60) if volapoy==1
+sum volapoyh [fw=factor] // 3.887522 = 3.9 horas en promedio 
+
+* TRABAJO NO REMUNERADO COMO APOYO A OTROS HOGARES Y TRABAJO VOLUNTARIO:
+* Contiene trabajo doméstico para el hogar, cuidados especiales, cuidados porpios y trabajo no remunerado trabajo comunitario y voluntario.
+gen tnohv = cond((trdomt==1|coh_cuidadosesp==1|cuiedtot==1|volapoy==1),1,0)
+tab tnohv [fw=factor] // 23,303,926 personas
+egen tnohvh = rowtotal(trdomh coh_cuidadosesp_h cuiedph volapoyh) if tnohv==1
+sum tnohvh [fw=factor]  // 6.932358 = 6.9 horas trabajadas
+
+* TRABAJO NO REMUNERADO DOMÉSTICO, DE CUIDADOS Y VOLUNTARIO
+* Contiene trabajo no remunerado como apoyo a otros hogares y trabaho voluntario, trabajo no rmeunerado de cuidado a iintegrantes del hogar y trabajo domestico 
+gen tnrdcv = cond((tdnr==1 | tdnrih==1 | tnohv==1),1,0)
+tab tnrdcv [fw=factor] // 106,035,391 personas
+egen tnrdcvh = rowtotal(tdnh tdnrihh tnohvh) if tnrdcv==1
+sum tnrdcvh [fw=factor] // 35.2571 = 35.3 horas trabajadas
+
+* ACTIVIDADES PRODUCTIVAS O DE TRABAJO
+* Contiene actividades para el mercado y bienes de autoconsumo, y trabajo no remunerado doméstico, de cuidados y voluntario
+gen apt = cond((apyba==1 | tnrdcv==1),1,0)
+tab apt [fw=factor] // 106,817,138 personas
+egen apth = rowtotal(apybah tnrdcvh) if apt==1
+sum apth [fw=factor]  // 65.11371 = 65.1 horas trabajadas
+
+if `p12ymas'==1 {
+keep if pob_12mas==1
+preserve 
+collapse (sum) alimentos limys mantyrp elaboracionh cpt ptpt gya tdnr ce_total c05_ptot c014_ptot c159_ptot c60m_ptot tdnrih trdomt coh_cuidadosesp cuiedtot volapoy tnohv tnrdcv apt (mean) alih liysh mtrph elah cpth ptth gyah tdnh ce_toth c05_total c014_toth c159_toth c60m_toth tdnrihh trdomh coh_cuidadosesp_h cuiedph volapoyh tnohvh tnrdcvh apth [fw=factor]
+save "$BasesNuevas\TrabajoNoRemunerado_2024_nac_12ymas.dta", replace 
+export excel using "$BasesNuevas/Horas2024_12ymas.xlsx", sheet("tnorem nacional", modify) firstrow(variables)
+restore
+
+preserve
+collapse (sum) alimentos limys mantyrp elaboracionh cpt ptpt gya tdnr ce_total c05_ptot c014_ptot c159_ptot c60m_ptot tdnrih trdomt coh_cuidadosesp cuiedtot volapoy tnohv tnrdcv apt (mean) alih liysh mtrph elah cpth ptth gyah tdnh ce_toth c05_total c014_toth c159_toth c60m_toth tdnrihh trdomh coh_cuidadosesp_h cuiedph volapoyh tnohvh tnrdcvh apth [fw=factor], by (mujer)
+save "$BasesNuevas\TrabajoNoRemunerado_2024_sex_12ymas.dta", replace 
+export excel using "$BasesNuevas/Horas2024_12ymas.xlsx", sheet("tnorem sexo", modify) firstrow(variables)
+restore
+}
+
+if `p15ymas'==1 {
+keep if pob_15mas==1
+preserve 
+collapse (sum) alimentos limys mantyrp elaboracionh cpt ptpt gya tdnr ce_total c05_ptot c014_ptot c159_ptot c60m_ptot tdnrih trdomt coh_cuidadosesp cuiedtot volapoy tnohv tnrdcv apt (mean) alih liysh mtrph elah cpth ptth gyah tdnh ce_toth c05_total c014_toth c159_toth c60m_toth tdnrihh trdomh coh_cuidadosesp_h cuiedph volapoyh tnohvh tnrdcvh apth [fw=factor]
+save "$BasesNuevas\TrabajoNoRemunerado_2024_nac_15ymas.dta", replace 
+export excel using "$BasesNuevas/Horas2024_15ymas.xlsx", sheet("tnorem nacional", modify) firstrow(variables)
+restore
+
+preserve 
+collapse (sum) alimentos limys mantyrp elaboracionh cpt ptpt gya tdnr ce_total c05_ptot c014_ptot c159_ptot c60m_ptot tdnrih trdomt coh_cuidadosesp cuiedtot volapoy tnohv tnrdcv apt (mean) alih liysh mtrph elah cpth ptth gyah tdnh ce_toth c05_total c014_toth c159_toth c60m_toth tdnrihh trdomh coh_cuidadosesp_h cuiedph volapoyh tnohvh tnrdcvh apth [fw=factor], by (mujer)
+save "$BasesNuevas\TrabajoNoRemunerado_2024_sex_15ymas.dta", replace 
+export excel using "$BasesNuevas/Horas2024_15ymas.xlsx", sheet("tnorem sexo", modify) firstrow(variables)
+restore
+}
+
+****************************************************************
+******                TRABAJO NO PRODUCTIVO               ******
+****************************************************************
+//////////////////////////////////////////////////////////////////////////////
+//             ACTIVIDADES DE CONVIVENCIA Y ENTRETENIMIENTO                 //
+//////////////////////////////////////////////////////////////////////////////
+
+* CONVIVENCIA FAMILIAR Y SOCIAL
+gen con = cond(p6_21_1 == 1 | p6_21_2 ==1 | p6_21_3 == 1 | p6_21_4 == 1,1,0)
+tab con [fw=factor] // 81,850,436 personas
+gen con_m = (((p6_21a_1_1 + p6_21a_1_3 + p6_21a_2_1 + p6_21a_2_3 + p6_21a_3_1 + p6_21a_3_3 + p6_21a_4_1 + p6_21a_4_3)*60) + (p6_21a_1_2 + p6_21a_1_4 + p6_21a_2_2 + p6_21a_2_4 + p6_21a_3_2 + p6_21a_3_4 + p6_21a_4_2 + p6_21a_4_4))
+gen con_h = (con_m/60) if con==1
+sum con_h [fw=factor] // 7.406425 = 7.4 horas en promedio
+
+* ASISTENCIA A EVENTOS DEPORTIVOS O DE ENTRETENIMIENTO 
+gen event = cond(p6_20_1==1 ,1,0)
+tab event [fw=factor] // 13,710,556 personas
+gen event_m= (((p6_20a_1_1 + p6_20a_1_3 )*60) + (p6_20a_1_2 + p6_20a_1_4 ))
+gen event_h = (event_m/60) if event==1 
+sum event_h [fw=factor] // 3.258653 = 3.3 horas en promedio
+
+* ASISTENCIA A EVENTOS CULTURALES 
+gen cult = cond(p6_20_2 == 1,1,0)
+tab cult [fw=factor] // 6,565,338 personas
+gen cult_m= (((p6_20a_2_1 + p6_20a_2_3)*60) + (p6_20a_2_2 + p6_20a_2_4))
+gen cult_h = (cult_m/60) if cult==1  
+sum cult_h [fw=factor] // 2.956493 = 3.0 horas en promedio
+
+* PARTICIPACIÓN EN JUEGOS Y AFICIONES
+gen jueg = cond(p6_19_1 == 1 | p6_19_2 == 1,1,0)
+tab jueg [fw=factor] // 19,868,772 personas
+gen jueg_m= (((p6_19a_1_1 + p6_19a_1_3 + p6_19a_2_1 + p6_19a_2_3)*60) + (p6_19a_1_2 + p6_19a_1_4 + p6_19a_2_2 + p6_19a_2_4))
+gen jueg_h = (jueg_m/60) if jueg==1
+sum jueg_h [fw=factor] // 5.220524 = 5.2 horas en promedio
+
+* DEPORTES Y EJERCICIO FÍSICO
+gen depor = cond(p6_18 == 1,1,0)
+tab depor [fw=factor] // 33,338,709 personas
+gen depor_m= (((p6_18a_1 + p6_18a_3)*60) + (p6_18a_2 + p6_18a_4))
+gen depor_h = (depor_m/60) if depor==1
+sum depor_h [fw=factor] // 5.080449 = 5.1 horas en promedio 
+
+* UTILIZACIÓN DE MEDIOS MASICOS DE COMUNICACIÓN
+gen medm = cond(p6_22_1 == 1 | p6_22_2 ==1 | p6_22_3 == 1 | p6_22_4 ==1 | p6_22_5 == 1 | p6_22_6 == 1,1,0)
+tab medm [fw=factor] // 98,891,050 personas 
+gen medm_m= (((p6_22a_1_1 + p6_22a_1_3 + p6_22a_2_1 + p6_22a_2_3 + p6_22a_3_1 + p6_22a_3_3 + p6_22a_4_1 + p6_22a_4_3 + p6_22a_5_1 + p6_22a_5_3 + p6_22a_6_1 + p6_22a_6_3)*60) + (p6_22a_1_2 + p6_22a_1_4 + p6_22a_2_2 + p6_22a_2_4 + p6_22a_3_2 + p6_22a_3_4 + p6_22a_4_2 + p6_22a_4_4 + p6_22a_5_2 + p6_22a_5_4 + p6_22a_6_2 + p6_22a_6_4))
+gen medm_h = (medm_m/60) if medm==1
+sum medm_h [fw=factor] // 15.39433 = 15.4 horas en promedio 
+
+* ACTIVIDADES DE CONVIVENCIA Y ENTRETENIMIENTO
+* Contiene todas las anteriores
+gen actent = cond(con==1 | event==1 | cult==1 | jueg==1 | depor==1 | medm==1,1,0)
+tab actent [fw=factor] // 105,010,114 personas 
+egen actenth = rowtotal(con_h event_h cult_h jueg_h depor_h medm_h) if actent==1
+sum actenth [fw=factor] // 23.48126 = 23.5 horas en promedio 
+
+//////////////////////////////////////////////////////////////////////////////
+//                   ACTIVIDADES DE CUIDADO PERSONAL                       //
+//////////////////////////////////////////////////////////////////////////////
+
+* DORMIR
+gen dort=cond(p6_1_1_1==99 & p6_1_1_2==99 & p6_1_1_3==99 & p6_1_1_4==99,0,1)
+tab dort [fw=factor] // 107,796,846 pero por temas de no especificos la verdadera cifra es 107,829,510 personas 
+gen dormir=(((p6_1_1_1 + p6_1_1_3)*60) + (p6_1_1_2 + p6_1_1_4)) if dort==1
+gen tdor=(dormir/60) 
+sum tdor [fw=factor] // 52.53848 = 52.5 horas en promedio
+
+// HORAS DE DORMIR TIENE VALORES NO ESPECIFICADOS, POR ELLO SE DEJA EL TOTAL DE LA POBLACIÓN PERO NO SE TOMA EN CUENTA PARA EL PROMEDIO
+
+* COMER
+gen comer=(((p6_1_2_1 + p6_1_2_3)*60) + (p6_1_2_2 + p6_1_2_4))
+gen tcom=(comer/60)
+gen ccomer=cond(comer>0,1,0)
+tab ccomer [fw=factor] // 107,829,510 personas 
+sum tcom [fw=factor] // 8.41393 = 8.4 horas en promedio 
+
+* ASEO Y ARREGLO
+gen aseo=(((p6_1_3_1 + p6_1_3_3)*60) + (p6_1_3_2 + p6_1_3_4))
+gen taseo=(aseo/60)
+gen caseo=cond(aseo>0,1,0)
+tab caseo [fw=factor] // 107,829,510 personas 
+sum taseo [fw=factor] // 6.202818 = 6.2 horas en promedio 
+
+* REZAR, MEDITAR, DESCANSAR 
+gen rezar = cond(p6_23_1 ==1 ,1,0)
+tab rezar [fw=factor] // 58,346,338 personas 
+gen rezar_m = (((p6_23a_1_1 + p6_23a_1_3)*60) + (p6_23a_1_2 + p6_23a_1_4))
+gen rezar_h = (rezar_m/60) if rezar==1
+sum rezar_h [fw=factor] // 4.319958 = 4.3 horas en promedio 
+
+* CUIDADOS A LA SALUD
+gen cas = cond(p6_23_2 ==1 ,1,0)
+tab cas [fw=factor] // 7,903,522 personas 
+gen casm = (((p6_23a_2_1 + p6_23a_2_3)*60) + (p6_23a_2_2 + p6_23a_2_4))
+gen cash = (casm/60) if cas==1
+sum cash [fw=factor] // 5.623657 = 5.6 horas en promedio
+
+* ACTIVIDADES DE CUIDADO PERSONAL
+* Contiene todas las anteriores
+gen actcp = cond(dort==1 | ccomer==1 | caseo==1 | rezar==1 | cas==1,1,0)
+tab actcp [fw=factor] // 107,829,510 personas 
+egen actcph = rowtotal(tdor tcom taseo rezar_h cash) if actcp==1
+sum actcph [fw=factor] // 69.88903 = 69.9 horas en promedio 
+
+//////////////////////////////////////////////////////////////////////////////
+//                        ACTIVIDADES DE ESTUDIO                            //
+//////////////////////////////////////////////////////////////////////////////
+
+* ASISTIR A CLASES, TOMAR CURSOS O ESTUDIAR:
+gen estudio=cond(p6_2_1==1,1,0)
+tab estudio [fw=factor] // 18,102,050 personas 
+gen tesms=(((p6_2a_1_1_1 + p6_2a_1_1_3 + p6_2a_1_2_1 + p6_2a_1_2_3)*60) + (p6_2a_1_1_2 + p6_2a_1_1_4 + p6_2a_1_2_2 + p6_2a_1_2_4)) if estudio==1
+gen tesh=(tesms/60)
+sum tesh [fw=factor] // 26.50352 = 26.5 horas en promedio 
+
+* HAER TAREAS, PRÁCTICAS ESCOLARES U OTRA ACTIVIDAD DE ESTUDIO:
+gen tareas=cond(p6_2_2==1,1,0)
+tab tareas [fw=factor] // 16,016,301 personas 
+gen ttam=(((p6_2a_2_1 + p6_2a_2_3)*60) + (p6_2a_2_2 + p6_2a_2_4))
+gen ttah=(ttam/60) if tareas==1
+sum ttah [fw=factor] // 8.12025 = 8.1 horas en promedio 
+
+* TRASLADARSE A LA ESCUELA:
+gen trasl=cond(p6_2_3==1,1,0)
+tab trasl [fw=factor] // 16,183,923 personas 
+gen ttrm=(((p6_2a_3_1 + p6_2a_3_3)*60) + (p6_2a_3_2 + p6_2a_3_4))
+gen ttrh=(ttrm/60) if trasl==1 
+sum ttrh [fw=factor] // 4.027673 = 4.0 horas en promedio 
+
+* ACTIVIDADES DE ESTUDIO 
+* Contiene todas las anteriores
+gen actesp = cond(estudio==1 | tareas==1 | trasl==1,1,0)
+tab actesp [fw=factor] // 18,102,050 personas 
+egen actesh = rowtotal(tesh ttah ttrh) if actesp==1
+sum actesh [fw=factor] // 37.28904 = 37.3 horas en promedio 
+
+
+if `p12ymas'==1 {
+keep if pob_12mas==1
+preserve 
+collapse (sum) con event cult jueg depor medm actent dort ccomer caseo rezar cas actcp estudio tareas trasl actesp (mean) con_h event_h cult_h jueg_h depor_h medm_h actenth tdor tcom taseo rezar_h cash actcph tesh ttah ttrh actesh [fw=factor]
+save "$BasesNuevas\NoProductivas_2024_nac_12ymas.dta", replace 
+export excel using "$BasesNuevas/Horas2024_12ymas.xlsx", sheet("noprod nacional", modify) firstrow(variables)
+restore
+
+preserve
+collapse (sum) con event cult jueg depor medm actent dort ccomer caseo rezar cas actcp estudio tareas trasl actesp (mean) con_h event_h cult_h jueg_h depor_h medm_h actenth tdor tcom taseo rezar_h cash actcph tesh ttah ttrh actesh [fw=factor], by (mujer)
+save "$BasesNuevas\NoProductivas_2024_sex_12ymas.dta", replace 
+export excel using "$BasesNuevas/Horas2024_12ymas.xlsx", sheet("noprod sexo", modify) firstrow(variables)
+restore
+}
+
+if `p15ymas'==1 {
+keep if pob_15mas==1
+preserve 
+collapse (sum) con event cult jueg depor medm actent dort ccomer caseo rezar cas actcp estudio tareas trasl actesp (mean) con_h event_h cult_h jueg_h depor_h medm_h actenth tdor tcom taseo rezar_h cash actcph tesh ttah ttrh actesh [fw=factor]
+save "$BasesNuevas\NoProductivas_2024_nac_15ymas.dta", replace 
+export excel using "$BasesNuevas/Horas2024_15ymas.xlsx", sheet("noprod nacional", modify) firstrow(variables)
+restore
+
+preserve
+collapse (sum) con event cult jueg depor medm actent dort ccomer caseo rezar cas actcp estudio tareas trasl actesp (mean) con_h event_h cult_h jueg_h depor_h medm_h actenth tdor tcom taseo rezar_h cash actcph tesh ttah ttrh actesh [fw=factor], by (mujer)
+save "$BasesNuevas\NoProductivas_2024_sex_15ymas.dta", replace 
+export excel using "$BasesNuevas/Horas2024_15ymas.xlsx", sheet("noprod sexo", modify) firstrow(variables)
+restore
+}
+
+keep llavemod llaveviv llavehog sexo edad est_dis upm_dis factor viv_sel hogar n_ren niv gra p4_5 p5_3c p5_5 p5_6_* p5_7 p5_10 p5_10a p5_11 mujer habla afro pob_12mas pob_15mas tpem tpemh buscar busc_m busc_h trtms trth traslado recoleccionh recms rech apyba apybah alimentos alims alih limys liysms liysh mantyrp mtrpms mtrph elaboracionh elams elah cpt cptms cpth ptpt pttms ptth gya gyam gyah tdnr tdnh ce_total ce_totms ce_toth c05_ptot c05_totms c05_total c014_ptot c014_totms c014_toth c159_ptot c159_totms c159_toth c60m_ptot c60m_totms c60m_toth tdnrih tdnrihh trdomt trdomm trdomh coh_cuidadosesp coh_cuidadosesp_m coh_cuidadosesp_h cuiedtot cuiedpm cuiedph volapoy volapoyms volapoyh tnohv tnohvh tnrdcv tnrdcvh apt apth con con_m con_h event event_m event_h cult cult_m cult_h jueg jueg_m jueg_h depor depor_m depor_h medm medm_m medm_h actent actenth dort dormir tdor comer tcom ccomer aseo taseo caseo rezar rezar_m rezar_h cas casm cash actcp actcph estudio tesms tesh tareas ttam ttah trasl ttrm ttrh actesp actesh
+
+save "$BasesNuevas\enut_grandesgrupos_2024.dta", replace
+
+*******************************************************************************************************
+***************************************** F I N *******************************************************
